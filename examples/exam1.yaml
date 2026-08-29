@@ -1,0 +1,24 @@
+name: Exam 1
+questions:
+  - question: What planet bears life?
+    options:
+      - option: Sun
+        correct: false
+        rationale: Not even a planet.
+      - option: Earth
+        correct: true
+        rationale: Earth bears life.
+      - option: Mars
+        correct: false
+        rationale: No indication found so far that Mars bears life.
+  - question: What planet has rings?
+    options:
+      - option: Sun
+        correct: false
+        rationale: Not even a planet.
+      - option: Saturn
+        correct: true
+        rationale: Saturn has rings and is famous for them.
+      - option: Uranus
+        correct: true
+        rationale: Despite not being as visible as Saturn's rings, Uranus has a system of rings.
