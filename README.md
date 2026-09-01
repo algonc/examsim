@@ -13,6 +13,22 @@
 - Run a random subset of a larger question bank.
 - Save interrupted sessions and resume them later.
 
+## Installation
+
+### Release binaries
+
+Download the package for your operating system and architecture from the [latest GitHub release](https://github.com/algonc/examsim/releases/latest). Extract the archive, then place the `examsim` executable in a directory included in your `PATH`.
+
+Release assets are available for Linux, macOS, and Windows on AMD64 and ARM64. Compare the archive's SHA-256 digest with its entry in `checksums.txt` before installing it.
+
+### Go
+
+With Go 1.25 or newer installed:
+
+```sh
+go install github.com/algonc/examsim@latest
+```
+
 ## Usage
 
 ```sh
@@ -154,40 +170,9 @@ Session files are stored as JSON under:
 
 The saved session includes the shuffled question order, shuffled option order, answers so far, and current position. Resume IDs are UUIDs and can only address files inside the sessions directory. Options that configure a new exam, such as `-q` and `--instant-feedback`, cannot be combined with `-resume`.
 
-## Build
+## Development
 
-Requirements:
-
-- Go 1.25 or newer
-
-Build the CLI:
-
-```sh
-mkdir -p bin
-go build -o bin/ .
-```
-
-This places the platform-appropriate executable in `bin/`. The directory contains generated build artifacts and is ignored by Git.
-
-Run from source:
-
-```sh
-go run . -e examples/exam1.yaml
-```
-
-## Test
-
-Run the test suite:
-
-```sh
-go test ./...
-```
-
-Run vet:
-
-```sh
-go vet ./...
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source builds, tests, and contribution guidelines. Maintainers can find the release procedure in [RELEASING.md](RELEASING.md).
 
 ## License
 

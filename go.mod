@@ -1,4 +1,4 @@
-module examsim
+module github.com/algonc/examsim
 
 go 1.25.0
 
