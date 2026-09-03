@@ -207,8 +207,8 @@ func shuffleOptions(options []Option) error {
 	return nil
 }
 
-func randomInt(max int) (int, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+func randomInt(upperBound int) (int, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(upperBound)))
 	if err != nil {
 		return 0, err
 	}

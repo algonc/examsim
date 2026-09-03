@@ -72,6 +72,7 @@ func (store *sessionStore) save(session *Session) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
+	//nolint:gosec // G703: path is derived from a validated UUID and a local filename.
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace session file: %w", err)
 	}
@@ -128,7 +129,12 @@ func (store *sessionStore) path(id string) (string, error) {
 	if strings.TrimSpace(store.dir) == "" {
 		return "", errors.New("session directory is empty")
 	}
-	return filepath.Join(store.dir, id+".json"), nil
+	filename := id + ".json"
+	if !filepath.IsLocal(filename) || filepath.Base(filename) != filename {
+		return "", errors.New("session ID produced an invalid filename")
+	}
+
+	return filepath.Join(store.dir, filename), nil
 }
 
 func validateSession(session *Session) error {
