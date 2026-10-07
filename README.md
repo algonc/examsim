@@ -33,7 +33,7 @@ go install github.com/algonc/examsim@latest
 
 ```sh
 examsim -e <exam.yaml> [options]
-examsim -resume <session-id>
+examsim -resume <session-id> [-output-width <columns>]
 examsim -help
 ```
 
@@ -43,6 +43,7 @@ examsim -help
 | --- | --- |
 | `-e <path>` | Load an exam YAML file and start a new session. |
 | `-q <count>` | Use a random subset of questions from the exam. New sessions only. |
+| `-output-width <columns>` | Set output width in columns (minimum 8). Omit for automatic sizing, with an 80-column fallback. Works for new and resumed sessions. |
 | `-i`, `--instant-feedback` | Show correctness after each question and rationales for incorrect answers. New sessions only. |
 | `-resume <session-id>` | Resume a saved session. |
 | `-h`, `-help`, `--help` | Show help and exit. |
@@ -79,6 +80,13 @@ Resume an interrupted session:
 examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b
 ```
 
+Set an output width:
+
+```sh
+examsim -e examples/exam1.yaml -output-width 100
+examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b -output-width 60
+```
+
 Print help:
 
 ```sh
@@ -87,9 +95,11 @@ examsim -help
 
 ## Exam Format
 
-Exams are YAML files with a top-level `name` and a `questions` list. Each question has a prompt and an `options` list. All documented fields are required, and unknown fields are rejected so mistakes in an answer key do not pass silently.
+Exams are YAML files with a top-level `name` and a `questions` list. Each question requires a `question` prompt and an `options` list, and can also include an optional `rationale` explaining the whole question. Unknown fields are rejected so mistakes in an answer key do not pass silently.
 
-Each option includes:
+The question rationale appears before the option rationales for incorrect answers, either immediately with instant feedback or in the final summary. It is preserved when saving and resuming a session. Omitted or blank question rationales are not displayed.
+
+Each option requires:
 
 - `option`: the displayed answer text
 - `correct`: `true` or `false`
@@ -111,6 +121,10 @@ questions:
       - option: Mars
         correct: false
         rationale: No indication found so far that Mars bears life.
+    rationale: >-
+      Only Earth bears life, the other options are not correct:
+      Sun is not even a planet.
+      No life has been found on Mars so far.
   - question: What planet has rings?
     options:
       - option: Sun
@@ -127,13 +141,15 @@ questions:
 When a question has more than one correct option, `examsim` displays the number of required choices:
 
 ```text
-Question 2 of 2
-
-What planet has rings? (choose 2)
-
-1 - Uranus
-2 - Saturn
-3 - Sun
++------------------------------------------------------------------------------+
+| Question 2 of 2                                                              |
++------------------------------------------------------------------------------+
+| What planet has rings? (Select 2 answers.)                                    |
++------------------------------------------------------------------------------+
+| Option 1 - Uranus                                                            |
+| Option 2 - Saturn                                                            |
+| Option 3 - Sun                                                               |
++------------------------------------------------------------------------------+
 ```
 
 Answers can be entered with spaces, commas, or semicolons:

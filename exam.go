@@ -22,8 +22,9 @@ type Exam struct {
 }
 
 type Question struct {
-	Question string   `json:"question"`
-	Options  []Option `json:"options"`
+	Question  string   `json:"question"`
+	Options   []Option `json:"options"`
+	Rationale string   `json:"rationale,omitempty"`
 }
 
 type Option struct {
@@ -38,8 +39,9 @@ type examYAML struct {
 }
 
 type questionYAML struct {
-	Question *string       `yaml:"question"`
-	Options  *[]optionYAML `yaml:"options"`
+	Question  *string       `yaml:"question"`
+	Options   *[]optionYAML `yaml:"options"`
+	Rationale *string       `yaml:"rationale"`
 }
 
 type optionYAML struct {
@@ -108,6 +110,9 @@ func (document examYAML) toExam() (Exam, error) {
 		}
 
 		question := Question{Question: *sourceQuestion.Question, Options: make([]Option, len(*sourceQuestion.Options))}
+		if sourceQuestion.Rationale != nil {
+			question.Rationale = *sourceQuestion.Rationale
+		}
 		for j, sourceOption := range *sourceQuestion.Options {
 			if sourceOption.Option == nil {
 				return Exam{}, fmt.Errorf(`question %d option %d field "option" is required`, i+1, j+1)

@@ -11,6 +11,10 @@ questions:
       - option: Mars
         correct: false
         rationale: No indication found so far that Mars bears life.
+    rationale: >-
+      Only Earth bears life, the other options are not correct:
+      Sun is not even a planet.
+      No life has been found on Mars so far.
   - question: What planet has rings?
     options:
       - option: Sun
