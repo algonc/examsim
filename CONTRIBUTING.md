@@ -6,8 +6,11 @@ Contributions are welcome. Keep changes focused, preserve existing command behav
 
 - Go 1.25 or newer
 - Git
+- GNU Make and `golangci-lint` for the Makefile checks (optional when running Go commands directly)
 
 ## Development Setup
+
+CLI source and tests live in `cmd/examsim/`. The Go module and dependency files remain at the repository root.
 
 Clone the repository and download its dependencies:
 
@@ -20,17 +23,20 @@ go mod download
 Build the CLI into the ignored `bin/` directory:
 
 ```sh
-mkdir -p bin
-go build -o bin/ .
+make build
 ```
+
+Without Make, run `go build -trimpath -o bin/ ./cmd/examsim`.
 
 Run it directly from source:
 
 ```sh
-go run . -e examples/exam1.yaml
+go run ./cmd/examsim -e examples/exam1.yaml
 ```
 
 ## Quality Checks
+
+Run `make` to verify dependencies, run vet, lint, and tests, then build the CLI. Use `make check` for checks only, `make test-cover` for coverage, and `make clean` to remove build output. `GO`, `GOLANGCI_LINT`, and `BIN_DIR` can be overridden, for example `make build BIN_DIR=dist`.
 
 Format changed Go files and run the project checks before submitting a change:
 

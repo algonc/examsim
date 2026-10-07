@@ -94,7 +94,7 @@ jobs:
 
               mkdir -p "$staging_dir/examples"
               GOOS="$target_os" GOARCH="$target_arch" go build \
-                -trimpath -ldflags='-s -w' -o "$staging_dir/$binary_name" .
+                -trimpath -ldflags='-s -w' -o "$staging_dir/$binary_name" ./cmd/examsim
               cp LICENSE README.md "$staging_dir/"
               cp examples/exam1.yaml "$staging_dir/examples/"
 
