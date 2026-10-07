@@ -87,6 +87,7 @@ questions:
   - option: Earth
     correct: true
     rationale: Earth bears life.
+  rationale: Only Earth is known to bear life.
 - question: What planet has rings?
   options:
   - option: Saturn
@@ -107,6 +108,12 @@ questions:
 	}
 	if got := exam.Questions[0].Options[1]; got.Option != "Earth" || !got.Correct || got.Rationale != "Earth bears life." {
 		t.Fatalf("unexpected parsed option: %#v", got)
+	}
+	if got := exam.Questions[0].Rationale; got != "Only Earth is known to bear life." {
+		t.Fatalf("question rationale = %q", got)
+	}
+	if got := exam.Questions[1].Rationale; got != "" {
+		t.Fatalf("omitted question rationale = %q, want empty", got)
 	}
 	if countCorrect(exam.Questions[1]) != 2 {
 		t.Fatalf("second question correct count = %d, want 2", countCorrect(exam.Questions[1]))
@@ -129,6 +136,9 @@ questions:
       - option: Mars
         correct: false
         rationale: No confirmed life has been found.
+    rationale: >-
+      Only Earth is known to bear life.
+      No confirmed life has been found on Mars.
 `))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -138,6 +148,39 @@ questions:
 	}
 	if got := exam.Questions[0].Options[0].Rationale; !strings.Contains(got, "known\nto bear life") {
 		t.Fatalf("rationale did not preserve the literal block: %q", got)
+	}
+	if got := exam.Questions[0].Rationale; got != "Only Earth is known to bear life. No confirmed life has been found on Mars." {
+		t.Fatalf("question rationale did not fold the block: %q", got)
+	}
+}
+
+func TestParseExamYAMLQuestionRationale(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		field string
+		want  string
+	}{
+		{name: "omitted"},
+		{name: "empty", field: `    rationale: ""`},
+		{name: "blank", field: `    rationale: "  "`, want: "  "},
+		{name: "literal", field: "    rationale: |-\n      First line.\n      Second line.", want: "First line.\nSecond line."},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			exam, err := parseExamYAML([]byte(`name: Exam
+questions:
+  - question: Q
+    options:
+      - option: A
+        correct: true
+        rationale: Correct.
+` + test.field + "\n"))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if got := exam.Questions[0].Rationale; got != test.want {
+				t.Fatalf("question rationale = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 
@@ -393,6 +436,7 @@ func TestSessionStoreRejectsTraversal(t *testing.T) {
 func TestSessionStoreRoundTripAndAtomicOverwrite(t *testing.T) {
 	store := &sessionStore{dir: t.TempDir()}
 	session := validTestSession()
+	session.Questions[0].Rationale = "Whole question explanation.\nAnother line."
 	session.Current = 1
 	session.Answers[0] = []int{0}
 	if err := store.save(session); err != nil {
@@ -412,6 +456,9 @@ func TestSessionStoreRoundTripAndAtomicOverwrite(t *testing.T) {
 	if loaded.Current != 2 || len(loaded.Answers[1]) != 1 || loaded.Answers[1][0] != 0 {
 		t.Fatalf("unexpected loaded progress: %#v", loaded)
 	}
+	if loaded.Questions[0].Rationale != session.Questions[0].Rationale || loaded.Questions[1].Rationale != "" {
+		t.Fatalf("unexpected loaded question rationales: %#v", loaded.Questions)
+	}
 
 	entries, err := os.ReadDir(store.dir)
 	if err != nil {
@@ -419,6 +466,57 @@ func TestSessionStoreRoundTripAndAtomicOverwrite(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Name() != session.ID+".json" {
 		t.Fatalf("unexpected session directory contents: %v", entries)
+	}
+}
+
+func TestConductSessionQuestionRationale(t *testing.T) {
+	const rationale = "Only Earth is known to bear life.\nNo confirmed life on Mars."
+	for _, test := range []struct {
+		name            string
+		instantFeedback bool
+		answer          string
+		rationale       string
+		wantCount       int
+	}{
+		{name: "summary", answer: "2\n", rationale: rationale, wantCount: 1},
+		{name: "instant and summary", instantFeedback: true, answer: "2\n", rationale: rationale, wantCount: 2},
+		{name: "correct answer", instantFeedback: true, answer: "1\n", rationale: rationale},
+		{name: "omitted", instantFeedback: true, answer: "2\n"},
+		{name: "blank", instantFeedback: true, answer: "2\n", rationale: " \n\t"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session := validTestSession()
+			session.InstantFeedback = test.instantFeedback
+			session.Questions = []Question{{
+				Question:  "What planet bears life?",
+				Rationale: test.rationale,
+				Options: []Option{
+					{Option: "Earth", Correct: true, Rationale: "Earth bears life."},
+					{Option: "Mars", Rationale: "No confirmed life found."},
+				},
+			}}
+			session.Answers = make([][]int, 1)
+			store := &sessionStore{dir: t.TempDir()}
+			var output bytes.Buffer
+			if err := conductSession(session, strings.NewReader(test.answer), &output, store, nil); err != nil {
+				t.Fatalf("conduct session: %v", err)
+			}
+			text := output.String()
+			if got := strings.Count(text, "Rationale: "); got != test.wantCount {
+				t.Fatalf("question rationale count = %d, want %d:\n%s", got, test.wantCount, text)
+			}
+			if test.wantCount > 0 {
+				want := "Rationale: " + rationale + "\n- Earth (correct): Earth bears life.\n- Mars (selected): No confirmed life found.\n"
+				if got := strings.Count(text, want); got != test.wantCount {
+					t.Fatalf("missing question or option feedback:\n%s", text)
+				}
+				if strings.Index(text, "Rationale: ") < strings.Index(text, "Answer: ") {
+					t.Fatalf("question rationale was revealed before answering:\n%s", text)
+				}
+			} else if test.answer == "2\n" && !strings.Contains(text, "- Mars (selected): No confirmed life found.") {
+				t.Fatalf("missing option feedback:\n%s", text)
+			}
+		})
 	}
 }
 

@@ -350,6 +350,9 @@ func printSummary(output io.Writer, session *Session) {
 }
 
 func printRationale(output io.Writer, question Question, selected []int) {
+	if strings.TrimSpace(question.Rationale) != "" {
+		fmt.Fprintf(output, "Rationale: %s\n", question.Rationale)
+	}
 	selectedSet := indexSet(selected)
 	for i, option := range question.Options {
 		markers := []string{}

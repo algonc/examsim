@@ -87,9 +87,11 @@ examsim -help
 
 ## Exam Format
 
-Exams are YAML files with a top-level `name` and a `questions` list. Each question has a prompt and an `options` list. All documented fields are required, and unknown fields are rejected so mistakes in an answer key do not pass silently.
+Exams are YAML files with a top-level `name` and a `questions` list. Each question requires a `question` prompt and an `options` list, and can also include an optional `rationale` explaining the whole question. Unknown fields are rejected so mistakes in an answer key do not pass silently.
 
-Each option includes:
+The question rationale appears before the option rationales for incorrect answers, either immediately with instant feedback or in the final summary. It is preserved when saving and resuming a session. Omitted or blank question rationales are not displayed.
+
+Each option requires:
 
 - `option`: the displayed answer text
 - `correct`: `true` or `false`
@@ -111,6 +113,10 @@ questions:
       - option: Mars
         correct: false
         rationale: No indication found so far that Mars bears life.
+    rationale: >-
+      Only Earth bears life, the other options are not correct:
+      Sun is not even a planet.
+      No life has been found on Mars so far.
   - question: What planet has rings?
     options:
       - option: Sun
