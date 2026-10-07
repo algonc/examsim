@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/mattn/go-runewidth"
 )
 
 const (
@@ -357,10 +359,10 @@ func assertOutputBoxWidth(t *testing.T, text string, width int) {
 	t.Helper()
 	count := 0
 	for _, line := range strings.Split(text, "\n") {
-		if strings.HasPrefix(line, "+-") || strings.HasPrefix(line, "| ") {
+		if strings.HasPrefix(line, "┌─") || strings.HasPrefix(line, "├─") || strings.HasPrefix(line, "└─") || strings.HasPrefix(line, "│ ") {
 			count++
-			if len(line) != width {
-				t.Fatalf("box line width = %d, want %d: %q", len(line), width, line)
+			if got := runewidth.StringWidth(line); got != width {
+				t.Fatalf("box line width = %d, want %d: %q", got, width, line)
 			}
 		}
 	}

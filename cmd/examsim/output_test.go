@@ -45,13 +45,13 @@ func TestPrintBox(t *testing.T) {
 	var output bytes.Buffer
 	printBox(&widthOutput{Writer: &output, width: 24}, "Question rationale", "Earth bears life.\n\nNo life on Mars.")
 	want := `
-+----------------------+
-| Question rationale   |
-+----------------------+
-| Earth bears life.    |
-|                      |
-| No life on Mars.     |
-+----------------------+
+┌──────────────────────┐
+│ Question rationale   │
+├──────────────────────┤
+│ Earth bears life.    │
+│                      │
+│ No life on Mars.     │
+└──────────────────────┘
 `
 	if got := output.String(); got != want {
 		t.Fatalf("box output:\n%s\nwant:\n%s", got, want)
@@ -74,13 +74,56 @@ func TestPrintQuestionLayout(t *testing.T) {
 			}}
 			var output bytes.Buffer
 			printQuestion(&output, "Question 3 of 60", question)
-			border := "+" + strings.Repeat("-", 78) + "+"
-			want := []string{border, "Question 3 of 60", border, test.prompt, border,
-				"Option 1 - Earth", "Option 2 - Mars", border}
+			border := strings.Repeat("─", 78)
+			want := []string{"┌" + border + "┐", "Question 3 of 60", "├" + border + "┤", test.prompt, "",
+				"1 - Earth", "", "2 - Mars", "", "└" + border + "┘"}
 			if got := boxContents(output.String()); !reflect.DeepEqual(got, want) {
 				t.Fatalf("question layout = %#v, want %#v", got, want)
 			}
 		})
+	}
+}
+
+func TestPrintQuestionWrappedOptions(t *testing.T) {
+	question := Question{Question: "Which response?", Options: []Option{
+		{Option: "Approve the proposal but cap autonomous approvals.", Correct: true},
+		{Option: "Decline the proposal."},
+	}}
+	var output bytes.Buffer
+	printQuestion(&widthOutput{Writer: &output, width: 32}, "Question 40 of 46", question)
+	want := `
+┌──────────────────────────────┐
+│ Question 40 of 46            │
+├──────────────────────────────┤
+│ Which response? (Select 1    │
+│ answer.)                     │
+│                              │
+│ 1 - Approve the proposal but │
+│     cap autonomous           │
+│     approvals.               │
+│                              │
+│ 2 - Decline the proposal.    │
+│                              │
+└──────────────────────────────┘
+`
+	if got := output.String(); got != want {
+		t.Fatalf("question output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestPrintQuestionFitsWidth(t *testing.T) {
+	question := Question{Question: "地球 bears life.\n\nWhich planet?", Options: []Option{
+		{Option: "地球 bears life, with cafe\u0301 and https://example.com/long/reference", Correct: true},
+		{Option: "Mars has no confirmed life."},
+	}}
+	for _, width := range []int{8, 9, 20, 80, 120} {
+		var output bytes.Buffer
+		printQuestion(&widthOutput{Writer: &output, width: width}, "Question 1 of 1", question)
+		for _, line := range strings.Split(strings.Trim(output.String(), "\n"), "\n") {
+			if got := runewidth.StringWidth(line); got != width {
+				t.Fatalf("line width = %d, want %d: %q", got, width, line)
+			}
+		}
 	}
 }
 
@@ -92,12 +135,13 @@ func TestPrintRationaleLayout(t *testing.T) {
 	}}
 	var output bytes.Buffer
 	printRationale(&output, question, []int{1, 2})
-	border := "+" + strings.Repeat("-", 78) + "+"
+	border := strings.Repeat("─", 78)
+	separator := "├" + border + "┤"
 	want := []string{
-		border, "Incorrect.", "", "Only Earth is known to bear life.", border,
-		"Option 1 (correct)", "Earth", "", "Correct.", "Earth bears life.", border,
-		"Option 2 (selected)", "Mars", "", "Incorrect.", "No confirmed life found.", border,
-		"Option 3 (correct, selected)", "Another answer", "", "Correct.", "Another explanation.", border,
+		"┌" + border + "┐", "Incorrect.", "", "Only Earth is known to bear life.", separator,
+		"Option 1 (correct)", "Earth", "", "Correct.", "Earth bears life.", separator,
+		"Option 2 (selected)", "Mars", "", "Incorrect.", "No confirmed life found.", separator,
+		"Option 3 (correct, selected)", "Another answer", "", "Correct.", "Another explanation.", "└" + border + "┘",
 	}
 	if got := boxContents(output.String()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("feedback layout = %#v, want %#v", got, want)
@@ -107,8 +151,8 @@ func TestPrintRationaleLayout(t *testing.T) {
 func boxContents(text string) []string {
 	lines := strings.Split(strings.Trim(text, "\n"), "\n")
 	for i, line := range lines {
-		if strings.HasPrefix(line, "| ") && strings.HasSuffix(line, " |") {
-			lines[i] = strings.TrimSpace(line[2 : len(line)-2])
+		if strings.HasPrefix(line, "│ ") && strings.HasSuffix(line, " │") {
+			lines[i] = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "│ "), " │"))
 		}
 	}
 	return lines

@@ -38,15 +38,15 @@ func boxWidth(output io.Writer) int {
 
 func printBox(output io.Writer, sections ...string) {
 	width := boxWidth(output) - 4
-	border := "+" + strings.Repeat("-", width+2) + "+"
-	fmt.Fprintln(output, "\n"+border)
+	border := strings.Repeat("─", width+2)
+	fmt.Fprintln(output, "\n┌"+border+"┐")
 	for i, section := range sections {
 		if i > 0 {
-			fmt.Fprintln(output, border)
+			fmt.Fprintln(output, "├"+border+"┤")
 		}
 		printBoxLines(output, section, width)
 	}
-	fmt.Fprintln(output, border)
+	fmt.Fprintln(output, "└"+border+"┘")
 }
 
 func printQuestion(output io.Writer, title string, question Question) {
@@ -56,18 +56,40 @@ func printQuestion(output io.Writer, title string, question Question) {
 		choices = "answers"
 	}
 	prompt := fmt.Sprintf("%s (Select %d %s.)", question.Question, required, choices)
-	options := make([]string, len(question.Options))
+	width := boxWidth(output) - 4
+	border := strings.Repeat("─", width+2)
+	fmt.Fprintln(output, "\n┌"+border+"┐")
+	printBoxLines(output, title, width)
+	fmt.Fprintln(output, "├"+border+"┤")
+	printBoxLines(output, prompt, width)
+	printBoxLine(output, "", width)
 	for i, option := range question.Options {
-		options[i] = fmt.Sprintf("Option %d - %s", i+1, option.Option)
+		prefix := fmt.Sprintf("%d - ", i+1)
+		if width-len(prefix) < 2 {
+			printBoxLines(output, prefix+option.Option, width)
+		} else {
+			for j, line := range wrapText(option.Option, width-len(prefix)) {
+				if j == 0 {
+					printBoxLine(output, prefix+line, width)
+				} else {
+					printBoxLine(output, strings.Repeat(" ", len(prefix))+line, width)
+				}
+			}
+		}
+		printBoxLine(output, "", width)
 	}
-	printBox(output, title, prompt, strings.Join(options, "\n"))
+	fmt.Fprintln(output, "└"+border+"┘")
 }
 
 func printBoxLines(output io.Writer, text string, width int) {
 	for _, line := range wrapText(text, width) {
-		padding := strings.Repeat(" ", width-runewidth.StringWidth(line))
-		fmt.Fprintf(output, "| %s%s |\n", line, padding)
+		printBoxLine(output, line, width)
 	}
+}
+
+func printBoxLine(output io.Writer, line string, width int) {
+	padding := strings.Repeat(" ", width-runewidth.StringWidth(line))
+	fmt.Fprintf(output, "│ %s%s │\n", line, padding)
 }
 
 func wrapText(text string, width int) []string {
