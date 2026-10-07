@@ -33,7 +33,7 @@ go install github.com/algonc/examsim@latest
 
 ```sh
 examsim -e <exam.yaml> [options]
-examsim -resume <session-id>
+examsim -resume <session-id> [-output-width <columns>]
 examsim -help
 ```
 
@@ -43,6 +43,7 @@ examsim -help
 | --- | --- |
 | `-e <path>` | Load an exam YAML file and start a new session. |
 | `-q <count>` | Use a random subset of questions from the exam. New sessions only. |
+| `-output-width <columns>` | Set output width in columns (minimum 8). Omit for automatic sizing, with an 80-column fallback. Works for new and resumed sessions. |
 | `-i`, `--instant-feedback` | Show correctness after each question and rationales for incorrect answers. New sessions only. |
 | `-resume <session-id>` | Resume a saved session. |
 | `-h`, `-help`, `--help` | Show help and exit. |
@@ -77,6 +78,13 @@ Resume an interrupted session:
 
 ```sh
 examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b
+```
+
+Set an output width:
+
+```sh
+examsim -e examples/exam1.yaml -output-width 100
+examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b -output-width 60
 ```
 
 Print help:
@@ -133,13 +141,15 @@ questions:
 When a question has more than one correct option, `examsim` displays the number of required choices:
 
 ```text
-Question 2 of 2
-
-What planet has rings? (choose 2)
-
-1 - Uranus
-2 - Saturn
-3 - Sun
++------------------------------------------------------------------------------+
+| Question 2 of 2                                                              |
++------------------------------------------------------------------------------+
+| What planet has rings? (Select 2 answers.)                                    |
++------------------------------------------------------------------------------+
+| Option 1 - Uranus                                                            |
+| Option 2 - Saturn                                                            |
+| Option 3 - Sun                                                               |
++------------------------------------------------------------------------------+
 ```
 
 Answers can be entered with spaces, commas, or semicolons:

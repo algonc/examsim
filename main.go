@@ -46,6 +46,7 @@ type cliConfig struct {
 	examPath        string
 	resumeID        string
 	questionLimit   int
+	outputWidth     int
 	instantFeedback bool
 }
 
@@ -103,6 +104,7 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	flags.StringVar(&config.examPath, "e", "", "exam YAML file")
 	flags.StringVar(&config.resumeID, "resume", "", "resume a saved session ID")
 	flags.IntVar(&config.questionLimit, "q", 0, "number of random questions to include")
+	flags.IntVar(&config.outputWidth, "output-width", 0, "box width in columns (0 for automatic sizing)")
 	flags.Var(instantFeedback, "i", "show feedback after each question")
 	flags.Var(instantFeedback, "instant-feedback", "show feedback after each question")
 
@@ -126,6 +128,9 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	if config.questionLimit < 0 {
 		return cliConfig{}, false, errors.New("-q must be zero or greater")
 	}
+	if config.outputWidth != 0 && config.outputWidth < 8 {
+		return cliConfig{}, false, errors.New("-output-width must be zero (automatic) or at least 8 columns")
+	}
 
 	setFlags := map[string]bool{}
 	flags.Visit(func(current *flag.Flag) {
@@ -139,6 +144,7 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 }
 
 func execute(config cliConfig, input io.Reader, output io.Writer, store *sessionStore, interrupted <-chan os.Signal) error {
+	output = &widthOutput{Writer: output, width: config.outputWidth}
 	session, err := loadOrCreateSession(store, config)
 	if err != nil {
 		return err
@@ -169,12 +175,13 @@ func printHelp(output io.Writer) {
 
 Usage:
   %s -e <exam.yaml> [options]
-  %s -resume <session-id>
+  %s -resume <session-id> [-output-width <columns>]
   %s -help
 
 Options:
   -e <path>                 Load an exam YAML file and start a new session.
   -q <count>                Use a random subset when starting a new exam.
+  -output-width <columns>   Set box width; 0 uses automatic sizing (default).
   -i, --instant-feedback    Show correctness and wrong-answer rationales immediately.
   -resume <session-id>      Resume a saved session.
   -h, -help, --help         Show this help message.
@@ -230,16 +237,7 @@ func conductSession(session *Session, input io.Reader, output io.Writer, store *
 		question := session.Questions[session.Current]
 		required := countCorrect(question)
 
-		fmt.Fprintf(output, "\nQuestion %d of %d\n\n", session.Current+1, total)
-		fmt.Fprint(output, question.Question)
-		if required > 1 {
-			fmt.Fprintf(output, " (choose %d)", required)
-		}
-		fmt.Fprint(output, "\n\n")
-
-		for i, option := range question.Options {
-			fmt.Fprintf(output, "%d - %s\n", i+1, option.Option)
-		}
+		printQuestion(output, fmt.Sprintf("Question %d of %d", session.Current+1, total), question)
 
 		selected, err := promptForAnswer(reader, output, len(question.Options), required, interrupted)
 		if err != nil {
@@ -249,9 +247,8 @@ func conductSession(session *Session, input io.Reader, output io.Writer, store *
 
 		if session.InstantFeedback {
 			if answerCorrect(question, selected) {
-				fmt.Fprintln(output, "\nCorrect!")
+				printBox(output, "Correct!")
 			} else {
-				fmt.Fprintln(output, "\nIncorrect.")
 				printRationale(output, question, selected)
 			}
 		}
@@ -337,22 +334,24 @@ func printSummary(output io.Writer, session *Session) {
 		percent = result.correct * 100 / total
 	}
 
-	fmt.Fprintf(output, "\nResult: %d%% (%d correct of %d questions).\n", percent, result.correct, total)
+	printBox(output, "Result", fmt.Sprintf("Result: %d%% (%d correct of %d questions).", percent, result.correct, total))
 	if len(result.wrongItems) == 0 {
 		return
 	}
 
 	fmt.Fprintln(output, "\nRationale for incorrect answers:")
 	for _, item := range result.wrongItems {
-		fmt.Fprintf(output, "\nQuestion %d: %s\n", item.number, item.question.Question)
+		printQuestion(output, fmt.Sprintf("Question %d of %d", item.number, total), item.question)
 		printRationale(output, item.question, item.selected)
 	}
 }
 
 func printRationale(output io.Writer, question Question, selected []int) {
+	feedback := "Incorrect."
 	if strings.TrimSpace(question.Rationale) != "" {
-		fmt.Fprintf(output, "Rationale: %s\n", question.Rationale)
+		feedback += "\n\n" + question.Rationale
 	}
+	sections := []string{feedback}
 	selectedSet := indexSet(selected)
 	for i, option := range question.Options {
 		markers := []string{}
@@ -363,12 +362,17 @@ func printRationale(output io.Writer, question Question, selected []int) {
 			markers = append(markers, "selected")
 		}
 
-		label := option.Option
+		label := fmt.Sprintf("Option %d", i+1)
 		if len(markers) > 0 {
 			label = fmt.Sprintf("%s (%s)", label, strings.Join(markers, ", "))
 		}
-		fmt.Fprintf(output, "- %s: %s\n", label, option.Rationale)
+		status := "Incorrect."
+		if option.Correct {
+			status = "Correct."
+		}
+		sections = append(sections, label+"\n"+option.Option+"\n\n"+status+"\n"+option.Rationale)
 	}
+	printBox(output, sections...)
 }
 
 func scoreSession(session *Session) result {

@@ -33,6 +33,7 @@ func TestRunHelp(t *testing.T) {
 		"-e <path>",
 		"-i, --instant-feedback",
 		"-resume <session-id>",
+		"-output-width <columns>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help output missing %q:\n%s", want, text)
@@ -59,12 +60,13 @@ questions:
 	}
 
 	var output bytes.Buffer
-	if err := run([]string{"-e", examPath}, strings.NewReader("1\n"), &output); err != nil {
+	if err := run([]string{"-e", examPath, "-output-width", "100"}, strings.NewReader("1\n"), &output); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if !strings.Contains(output.String(), "Result: 100% (1 correct of 1 questions).") {
 		t.Fatalf("unexpected output:\n%s", output.String())
 	}
+	assertOutputBoxWidth(t, output.String(), 100)
 
 	entries, err := os.ReadDir(filepath.Join(temporaryHome, ".examsim", "sessions"))
 	if err != nil {
@@ -300,6 +302,73 @@ func TestParseCLIRejectsIgnoredArgumentsAndResumeOptions(t *testing.T) {
 	}
 }
 
+func TestParseCLIOutputWidth(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		args    []string
+		width   int
+		wantErr bool
+	}{
+		{name: "default", args: []string{"-e", "exam.yaml"}},
+		{name: "automatic", args: []string{"-e", "exam.yaml", "-output-width", "0"}},
+		{name: "narrow", args: []string{"-e", "exam.yaml", "-output-width", "40"}, width: 40},
+		{name: "wide", args: []string{"-e", "exam.yaml", "-output-width", "120"}, width: 120},
+		{name: "minimum", args: []string{"-e", "exam.yaml", "-output-width", "8"}, width: 8},
+		{name: "resume", args: []string{"-resume", testSessionID, "-output-width", "60"}, width: 60},
+		{name: "negative", args: []string{"-e", "exam.yaml", "-output-width", "-1"}, wantErr: true},
+		{name: "too small", args: []string{"-e", "exam.yaml", "-output-width", "7"}, wantErr: true},
+		{name: "not a number", args: []string{"-e", "exam.yaml", "-output-width", "wide"}, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, proceed, err := parseCLI(test.args, io.Discard)
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "output-width") {
+					t.Fatalf("error = %v, want invalid output width", err)
+				}
+				return
+			}
+			if err != nil || !proceed || config.outputWidth != test.width {
+				t.Fatalf("config = %#v, proceed = %v, error = %v", config, proceed, err)
+			}
+		})
+	}
+}
+
+func TestExecuteResumesWithOutputWidth(t *testing.T) {
+	store := &sessionStore{dir: t.TempDir()}
+	session := validTestSession()
+	session.InstantFeedback = true
+	session.Questions[0].Rationale = "Whole question explanation."
+	session.Questions[0].Options = append(session.Questions[0].Options, Option{Option: "Wrong", Rationale: "Wrong option explanation."})
+	if err := store.save(session); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := execute(cliConfig{resumeID: session.ID, outputWidth: 40}, strings.NewReader("2\n1\n"), &output, store, nil); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	assertOutputBoxWidth(t, output.String(), 40)
+	if got := strings.Count(output.String(), "Whole question explanation."); got != 2 {
+		t.Fatalf("question rationale count = %d, want instant and summary feedback", got)
+	}
+}
+
+func assertOutputBoxWidth(t *testing.T, text string, width int) {
+	t.Helper()
+	count := 0
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "+-") || strings.HasPrefix(line, "| ") {
+			count++
+			if len(line) != width {
+				t.Fatalf("box line width = %d, want %d: %q", len(line), width, line)
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatal("no box output")
+	}
+}
+
 func TestParseAnswer(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -502,18 +571,19 @@ func TestConductSessionQuestionRationale(t *testing.T) {
 				t.Fatalf("conduct session: %v", err)
 			}
 			text := output.String()
-			if got := strings.Count(text, "Rationale: "); got != test.wantCount {
+			if got := strings.Count(text, "Only Earth is known to bear life."); got != test.wantCount {
 				t.Fatalf("question rationale count = %d, want %d:\n%s", got, test.wantCount, text)
 			}
 			if test.wantCount > 0 {
-				want := "Rationale: " + rationale + "\n- Earth (correct): Earth bears life.\n- Mars (selected): No confirmed life found.\n"
-				if got := strings.Count(text, want); got != test.wantCount {
-					t.Fatalf("missing question or option feedback:\n%s", text)
+				for _, want := range []string{"Only Earth is known to bear life.", "No confirmed life on Mars.", "Option 1 (correct)", "Option 2 (selected)", "Earth bears life.", "No confirmed life found."} {
+					if got := strings.Count(text, want); got != test.wantCount {
+						t.Fatalf("feedback %q count = %d, want %d:\n%s", want, got, test.wantCount, text)
+					}
 				}
-				if strings.Index(text, "Rationale: ") < strings.Index(text, "Answer: ") {
+				if strings.Index(text, "Only Earth is known to bear life.") < strings.Index(text, "Answer: ") {
 					t.Fatalf("question rationale was revealed before answering:\n%s", text)
 				}
-			} else if test.answer == "2\n" && !strings.Contains(text, "- Mars (selected): No confirmed life found.") {
+			} else if test.answer == "2\n" && (!strings.Contains(text, "Option 2 (selected)") || !strings.Contains(text, "No confirmed life found.")) {
 				t.Fatalf("missing option feedback:\n%s", text)
 			}
 		})
