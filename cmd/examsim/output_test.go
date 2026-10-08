@@ -155,20 +155,22 @@ func TestPrintRationaleLayout(t *testing.T) {
 		{Option: "Earth", Correct: true, Rationale: "Earth bears life."},
 		{Option: "Mars", Rationale: "No confirmed life found."},
 		{Option: "Another answer", Correct: true, Rationale: "Another explanation."},
+		{Option: "Unselected answer", Rationale: "Unselected explanation."},
 	}}
 	var output bytes.Buffer
 	printRationale(&output, question, []int{1, 2})
 	border := strings.Repeat("─", 78)
-	separator := "├" + border + "┤"
 	want := []string{
-		"┌" + border + "┐", "Incorrect.", "", "Only Earth is known to bear life.", separator,
-		"Option 1 (correct)", "Earth", "", "Correct.", "Earth bears life.", separator,
-		"Option 2 (selected)", "Mars", "", "Incorrect.", "No confirmed life found.", separator,
-		"Option 3 (correct, selected)", "Another answer", "", "Correct.", "Another explanation.", "└" + border + "┘",
+		"┌" + border + "┐", "Incorrect.", "", "Only Earth is known to bear life.", "",
+		"Option 1 (correct)", "“Earth”", "", "Correct.", "Earth bears life.", "",
+		"Option 2 (selected)", "“Mars”", "", "Incorrect.", "No confirmed life found.", "",
+		"Option 3 (correct, selected)", "“Another answer”", "", "Correct.", "Another explanation.", "",
+		"Option 4", "“Unselected answer”", "", "Incorrect.", "Unselected explanation.", "└" + border + "┘",
 	}
 	if got := boxContents(output.String()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("feedback layout = %#v, want %#v", got, want)
 	}
+	assertOutputBoxWidth(t, output.String(), 80)
 }
 
 func boxContents(text string) []string {

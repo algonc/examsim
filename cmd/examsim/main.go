@@ -415,9 +415,9 @@ func printRationale(output io.Writer, question Question, selected []int) {
 		if option.Correct {
 			status = "Correct."
 		}
-		sections = append(sections, label+"\n"+option.Option+"\n\n"+status+"\n"+option.Rationale)
+		sections = append(sections, label+"\n“"+option.Option+"”\n\n"+status+"\n"+option.Rationale)
 	}
-	printBox(output, sections...)
+	printBox(output, strings.Join(sections, "\n\n"))
 }
 
 func scoreSession(session *Session) result {
