@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
@@ -14,6 +15,14 @@ import (
 )
 
 const defaultBoxWidth = 80
+
+func selectionCountWords(count int) string {
+	words := [...]string{"one", "two", "three", "four", "five"}
+	if count >= 1 && count <= len(words) {
+		return words[count-1]
+	}
+	return strconv.Itoa(count)
+}
 
 type widthOutput struct {
 	io.Writer

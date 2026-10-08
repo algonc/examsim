@@ -307,7 +307,7 @@ func promptForAnswer(reader *bufio.Reader, output io.Writer, optionCount, requir
 		if required == 1 {
 			fmt.Fprint(output, "\nAnswer: ")
 		} else {
-			fmt.Fprintf(output, "\nAnswer (%d numbers): ", required)
+			fmt.Fprintf(output, "\nAnswer (select %s): ", selectionCountWords(required))
 		}
 
 		read := make(chan lineResult, 1)

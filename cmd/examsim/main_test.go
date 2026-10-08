@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -368,6 +369,30 @@ func assertOutputBoxWidth(t *testing.T, text string, width int) {
 	}
 	if count == 0 {
 		t.Fatal("no box output")
+	}
+}
+
+func TestPromptForAnswerWording(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		required int
+		input    string
+		want     string
+	}{
+		{name: "single", required: 1, input: "1\n", want: "\nAnswer: "},
+		{name: "two", required: 2, input: "1 2\n", want: "\nAnswer (select two): "},
+		{name: "three", required: 3, input: "1 2 3\n", want: "\nAnswer (select three): "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			selected, err := promptForAnswer(bufio.NewReader(strings.NewReader(test.input)), &output, 3, test.required, nil)
+			if err != nil || len(selected) != test.required {
+				t.Fatalf("selected = %v, error = %v", selected, err)
+			}
+			if got := output.String(); got != test.want {
+				t.Fatalf("prompt = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

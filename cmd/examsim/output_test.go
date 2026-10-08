@@ -12,6 +12,26 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+func TestSelectionCountWords(t *testing.T) {
+	for _, test := range []struct {
+		count int
+		want  string
+	}{
+		{count: 1, want: "one"},
+		{count: 2, want: "two"},
+		{count: 3, want: "three"},
+		{count: 4, want: "four"},
+		{count: 5, want: "five"},
+		{count: 6, want: "6"},
+		{count: 21, want: "21"},
+		{count: 100, want: "100"},
+	} {
+		if got := selectionCountWords(test.count); got != test.want {
+			t.Errorf("selectionCountWords(%d) = %q, want %q", test.count, got, test.want)
+		}
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	for _, test := range []struct {
 		name  string
