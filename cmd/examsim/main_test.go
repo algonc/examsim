@@ -65,7 +65,7 @@ questions:
 	if err := run([]string{"-e", examPath, "-output-width", "100"}, strings.NewReader("1\n"), &output); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if !strings.Contains(output.String(), "Result: 100% (1 correct of 1 questions).") {
+	if !strings.Contains(output.String(), "100% (1 correct of 1 questions).") {
 		t.Fatalf("unexpected output:\n%s", output.String())
 	}
 	assertOutputBoxWidth(t, output.String(), 100)
@@ -686,7 +686,7 @@ questions:
 	if err := execute(cliConfig{resumeID: resumeID}, strings.NewReader("1\n"), &resumedOutput, store, nil); err != nil {
 		t.Fatalf("resumed execution: %v", err)
 	}
-	if !strings.Contains(resumedOutput.String(), "Result: 100% (2 correct of 2 questions).") {
+	if !strings.Contains(resumedOutput.String(), "100% (2 correct of 2 questions).") {
 		t.Fatalf("unexpected resumed output:\n%s", resumedOutput.String())
 	}
 	if _, err := os.Stat(filepath.Join(store.dir, resumeID+".json")); !os.IsNotExist(err) {

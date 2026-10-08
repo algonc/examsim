@@ -127,6 +127,34 @@ func TestPrintQuestionFitsWidth(t *testing.T) {
 	}
 }
 
+func TestPrintSummaryLayout(t *testing.T) {
+	question := Question{Question: "What planet bears life?", Options: []Option{
+		{Option: "Earth", Correct: true, Rationale: "Earth bears life."},
+		{Option: "Mars", Rationale: "No confirmed life found."},
+	}}
+	session := &Session{
+		Questions: []Question{question, question},
+		Answers:   [][]int{{0}, {1}},
+	}
+	var output bytes.Buffer
+	printSummary(&output, session)
+	want := []string{
+		"┌" + strings.Repeat("─", 78) + "┐",
+		"Result",
+		"50% (1 correct of 2 questions).",
+		"└" + strings.Repeat("─", 78) + "┘",
+	}
+	summary, _, _ := strings.Cut(output.String(), "\nRationale for incorrect answers:")
+	if got := boxContents(summary); !reflect.DeepEqual(got, want) {
+		t.Fatalf("summary layout = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(output.String(), "Rationale for incorrect answers:") ||
+		!strings.Contains(output.String(), "Question 2 of 2") {
+		t.Fatalf("missing incorrect-answer review:\n%s", output.String())
+	}
+	assertOutputBoxWidth(t, output.String(), 80)
+}
+
 func TestPrintRationaleLayout(t *testing.T) {
 	question := Question{Rationale: "Only Earth is known to bear life.", Options: []Option{
 		{Option: "Earth", Correct: true, Rationale: "Earth bears life."},

@@ -334,7 +334,7 @@ func printSummary(output io.Writer, session *Session) {
 		percent = result.correct * 100 / total
 	}
 
-	printBox(output, "Result", fmt.Sprintf("Result: %d%% (%d correct of %d questions).", percent, result.correct, total))
+	printBox(output, fmt.Sprintf("Result\n%d%% (%d correct of %d questions).", percent, result.correct, total))
 	if len(result.wrongItems) == 0 {
 		return
 	}
