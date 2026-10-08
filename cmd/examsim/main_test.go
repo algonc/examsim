@@ -346,7 +346,7 @@ func TestExecuteResumesWithOutputWidth(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	if err := execute(cliConfig{resumeID: session.ID, outputWidth: 40}, strings.NewReader("2\n1\n"), &output, store, nil); err != nil {
+	if err := execute(cliConfig{resumeID: session.ID, outputWidth: 40}, strings.NewReader("2\n1\ny\n"), &output, store, nil); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 	assertOutputBoxWidth(t, output.String(), 40)
@@ -495,6 +495,91 @@ func TestScoreSession(t *testing.T) {
 	}
 }
 
+func TestExecuteDetailedReportPrompt(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		input       string
+		wantReport  bool
+		wantPrompts int
+		allCorrect  bool
+	}{
+		{name: "yes", input: "2\ny\n", wantReport: true, wantPrompts: 1},
+		{name: "no", input: "2\nn\n", wantPrompts: 1},
+		{name: "yes with whitespace and case", input: "2\n YES \n", wantReport: true, wantPrompts: 1},
+		{name: "no with case", input: "2\nNO\n", wantPrompts: 1},
+		{name: "retry invalid and blank", input: "2\nmaybe\n\ny\n", wantReport: true, wantPrompts: 3},
+		{name: "end of input", input: "2\n", wantPrompts: 1},
+		{name: "yes without newline", input: "2\ny", wantReport: true, wantPrompts: 1},
+		{name: "invalid at end of input", input: "2\nmaybe", wantPrompts: 1},
+		{name: "all correct", input: "1\ny\n", wantPrompts: 1, allCorrect: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := &sessionStore{dir: t.TempDir()}
+			session := validTestSession()
+			session.Current = 1
+			session.Answers[0] = []int{0}
+			session.Questions[1].Options = append(session.Questions[1].Options,
+				Option{Option: "Wrong answer", Rationale: "Wrong answer explanation."})
+			if err := store.save(session); err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			if err := execute(cliConfig{resumeID: session.ID}, strings.NewReader(test.input), &output, store, nil); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			text := output.String()
+			prompt := "Display detailed exam report? (y/n)"
+			if got := strings.Count(text, prompt); got != test.wantPrompts {
+				t.Fatalf("prompt count = %d, want %d:\n%s", got, test.wantPrompts, text)
+			}
+			if resultAt := strings.Index(text, "│ Result"); resultAt < 0 || resultAt > strings.Index(text, prompt) {
+				t.Fatalf("result must precede report prompt:\n%s", text)
+			}
+			reportAt := strings.Index(text, "Rationale for incorrect answers:")
+			if (reportAt >= 0) != test.wantReport {
+				t.Fatalf("report displayed = %v, want %v:\n%s", reportAt >= 0, test.wantReport, text)
+			}
+			if test.wantReport && (reportAt < strings.LastIndex(text, prompt) ||
+				!strings.Contains(text, "Wrong answer explanation.")) {
+				t.Fatalf("missing report details after prompt:\n%s", text)
+			}
+			if test.allCorrect && !strings.Contains(text, "All questions answered correctly.") {
+				t.Fatalf("missing all-correct report:\n%s", text)
+			}
+			entries, err := os.ReadDir(store.dir)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("completed session was not removed: entries = %v, error = %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestExecuteInterruptedAtReportPrompt(t *testing.T) {
+	store := &sessionStore{dir: t.TempDir()}
+	session := validTestSession()
+	session.Current = 1
+	session.Answers[0] = []int{0}
+	if err := store.save(session); err != nil {
+		t.Fatal(err)
+	}
+	interrupts := make(chan os.Signal, 1)
+	release := make(chan struct{})
+	defer close(release)
+	input := &signalAfterFirstLineReader{first: strings.NewReader("1\n"), signal: interrupts, release: release}
+	var output bytes.Buffer
+	if err := execute(cliConfig{resumeID: session.ID}, input, &output, store, interrupts); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(output.String(), "Display detailed exam report? (y/n)") ||
+		strings.Contains(output.String(), "Resume this session") {
+		t.Fatalf("unexpected interrupted report output:\n%s", output.String())
+	}
+	entries, err := os.ReadDir(store.dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("completed session was not removed: entries = %v, error = %v", entries, err)
+	}
+}
+
 func TestSessionStoreRejectsTraversal(t *testing.T) {
 	store := &sessionStore{dir: t.TempDir()}
 	for _, id := range []string{"../../outside", `..\..\outside`, "not-a-uuid"} {
@@ -569,7 +654,7 @@ func TestConductSessionQuestionRationale(t *testing.T) {
 			session.Answers = make([][]int, 1)
 			store := &sessionStore{dir: t.TempDir()}
 			var output bytes.Buffer
-			if err := conductSession(session, strings.NewReader(test.answer), &output, store, nil); err != nil {
+			if err := conductSession(session, strings.NewReader(test.answer+"y\n"), &output, store, nil); err != nil {
 				t.Fatalf("conduct session: %v", err)
 			}
 			text := output.String()

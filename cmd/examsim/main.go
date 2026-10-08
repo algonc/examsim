@@ -260,7 +260,46 @@ func conductSession(session *Session, input io.Reader, output io.Writer, store *
 	}
 
 	printSummary(output, session)
+	displayReport, err := promptForReport(reader, output, interrupted)
+	if err != nil {
+		return err
+	}
+	if displayReport {
+		printDetailedReport(output, session)
+	}
 	return nil
+}
+
+func promptForReport(reader *bufio.Reader, output io.Writer, interrupted <-chan os.Signal) (bool, error) {
+	for {
+		fmt.Fprint(output, "\nDisplay detailed exam report? (y/n) ")
+		read := make(chan lineResult, 1)
+		go func() {
+			line, err := reader.ReadString('\n')
+			read <- lineResult{line: line, err: err}
+		}()
+
+		select {
+		case <-interrupted:
+			fmt.Fprintln(output)
+			return false, nil
+		case result := <-read:
+			if result.err != nil && !errors.Is(result.err, io.EOF) {
+				return false, result.err
+			}
+			switch strings.ToLower(strings.TrimSpace(result.line)) {
+			case "y", "yes":
+				return true, nil
+			case "n", "no":
+				return false, nil
+			}
+			if errors.Is(result.err, io.EOF) {
+				fmt.Fprintln(output)
+				return false, nil
+			}
+			fmt.Fprintln(output, "Please enter y or n.")
+		}
+	}
 }
 
 func promptForAnswer(reader *bufio.Reader, output io.Writer, optionCount, required int, interrupted <-chan os.Signal) ([]int, error) {
@@ -335,7 +374,13 @@ func printSummary(output io.Writer, session *Session) {
 	}
 
 	printBox(output, fmt.Sprintf("Result\n%d%% (%d correct of %d questions).", percent, result.correct, total))
+}
+
+func printDetailedReport(output io.Writer, session *Session) {
+	result := scoreSession(session)
+	total := len(session.Questions)
 	if len(result.wrongItems) == 0 {
+		fmt.Fprintln(output, "\nAll questions answered correctly.")
 		return
 	}
 

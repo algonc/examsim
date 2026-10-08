@@ -144,13 +144,8 @@ func TestPrintSummaryLayout(t *testing.T) {
 		"50% (1 correct of 2 questions).",
 		"└" + strings.Repeat("─", 78) + "┘",
 	}
-	summary, _, _ := strings.Cut(output.String(), "\nRationale for incorrect answers:")
-	if got := boxContents(summary); !reflect.DeepEqual(got, want) {
+	if got := boxContents(output.String()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("summary layout = %#v, want %#v", got, want)
-	}
-	if !strings.Contains(output.String(), "Rationale for incorrect answers:") ||
-		!strings.Contains(output.String(), "Question 2 of 2") {
-		t.Fatalf("missing incorrect-answer review:\n%s", output.String())
 	}
 	assertOutputBoxWidth(t, output.String(), 80)
 }
