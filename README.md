@@ -97,13 +97,14 @@ examsim -help
 
 Exams are YAML files with a top-level `name` and a `questions` list. Each question requires a `question` prompt and an `options` list, and can also include an optional `rationale` explaining the whole question. Unknown fields are rejected so mistakes in an answer key do not pass silently.
 
-The question rationale appears before the option rationales for incorrect answers, either immediately with instant feedback or in the final summary. It is preserved when saving and resuming a session. Omitted or blank question rationales are not displayed.
+Both question-level and option-level `rationale` fields are optional and may be omitted or left blank. When provided, the question rationale appears before the option rationales for incorrect answers, either immediately with instant feedback or in the final summary. Rationales are preserved when saving and resuming a session.
 
 Each option requires:
 
 - `option`: the displayed answer text
 - `correct`: `true` or `false`
-- `rationale`: feedback shown for incorrect answers, either immediately with instant feedback or in the final summary
+
+Each option can also include an optional `rationale`: feedback shown for incorrect answers, either immediately with instant feedback or in the final summary.
 
 Example:
 

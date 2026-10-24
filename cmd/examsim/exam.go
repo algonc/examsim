@@ -120,13 +120,12 @@ func (document examYAML) toExam() (Exam, error) {
 			if sourceOption.Correct == nil {
 				return Exam{}, fmt.Errorf(`question %d option %d field "correct" is required`, i+1, j+1)
 			}
-			if sourceOption.Rationale == nil {
-				return Exam{}, fmt.Errorf(`question %d option %d field "rationale" is required`, i+1, j+1)
-			}
 			question.Options[j] = Option{
-				Option:    *sourceOption.Option,
-				Correct:   *sourceOption.Correct,
-				Rationale: *sourceOption.Rationale,
+				Option:  *sourceOption.Option,
+				Correct: *sourceOption.Correct,
+			}
+			if sourceOption.Rationale != nil {
+				question.Options[j].Rationale = *sourceOption.Rationale
 			}
 		}
 		exam.Questions[i] = question
@@ -160,9 +159,6 @@ func validateExam(name string, questions []Question) error {
 				return fmt.Errorf("question %d contains duplicate option %q", i+1, label)
 			}
 			seenOptions[label] = true
-			if strings.TrimSpace(option.Rationale) == "" {
-				return fmt.Errorf("question %d option %d has an empty rationale", i+1, j+1)
-			}
 		}
 		if countCorrect(question) == 0 {
 			return fmt.Errorf("question %d has no correct options", i+1)

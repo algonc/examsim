@@ -57,7 +57,6 @@ questions:
     options:
       - option: Answer
         correct: true
-        rationale: Correct.
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -159,31 +158,43 @@ questions:
 	}
 }
 
-func TestParseExamYAMLQuestionRationale(t *testing.T) {
-	for _, test := range []struct {
-		name  string
-		field string
-		want  string
-	}{
-		{name: "omitted"},
-		{name: "empty", field: `    rationale: ""`},
-		{name: "blank", field: `    rationale: "  "`, want: "  "},
-		{name: "literal", field: "    rationale: |-\n      First line.\n      Second line.", want: "First line.\nSecond line."},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			exam, err := parseExamYAML([]byte(`name: Exam
+func TestParseExamYAMLOptionalRationales(t *testing.T) {
+	for _, level := range []string{"question", "option"} {
+		t.Run(level, func(t *testing.T) {
+			for _, test := range []struct {
+				name  string
+				field string
+				want  string
+			}{
+				{name: "omitted"},
+				{name: "null", field: `    rationale: null`},
+				{name: "empty", field: `    rationale: ""`},
+				{name: "blank", field: `    rationale: "  "`, want: "  "},
+				{name: "literal", field: "    rationale: |-\n      First line.\n      Second line.", want: "First line.\nSecond line."},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					field := test.field
+					if level == "option" && field != "" {
+						field = strings.ReplaceAll("    "+field, "\n", "\n    ")
+					}
+					exam, err := parseExamYAML([]byte(`name: Exam
 questions:
   - question: Q
     options:
       - option: A
         correct: true
-        rationale: Correct.
-` + test.field + "\n"))
-			if err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-			if got := exam.Questions[0].Rationale; got != test.want {
-				t.Fatalf("question rationale = %q, want %q", got, test.want)
+` + field + "\n"))
+					if err != nil {
+						t.Fatalf("parse: %v", err)
+					}
+					got := exam.Questions[0].Rationale
+					if level == "option" {
+						got = exam.Questions[0].Options[0].Rationale
+					}
+					if got != test.want {
+						t.Fatalf("%s rationale = %q, want %q", level, got, test.want)
+					}
+				})
 			}
 		})
 	}
@@ -219,19 +230,6 @@ questions:
         rationale: Required
 `,
 			want: `field "correct" is required`,
-		},
-		{
-			name: "empty rationale",
-			yaml: `
-name: Exam
-questions:
-  - question: Q
-    options:
-      - option: A
-        correct: true
-        rationale: ""
-`,
-			want: "empty rationale",
 		},
 		{
 			name: "duplicate option",
@@ -618,6 +616,7 @@ func TestSessionStoreRoundTripAndAtomicOverwrite(t *testing.T) {
 	store := &sessionStore{dir: t.TempDir()}
 	session := validTestSession()
 	session.Questions[0].Rationale = "Whole question explanation.\nAnother line."
+	session.Questions[0].Options[0].Rationale = ""
 	session.Current = 1
 	session.Answers[0] = []int{0}
 	if err := store.save(session); err != nil {
@@ -639,6 +638,9 @@ func TestSessionStoreRoundTripAndAtomicOverwrite(t *testing.T) {
 	}
 	if loaded.Questions[0].Rationale != session.Questions[0].Rationale || loaded.Questions[1].Rationale != "" {
 		t.Fatalf("unexpected loaded question rationales: %#v", loaded.Questions)
+	}
+	if loaded.Questions[0].Options[0].Rationale != "" {
+		t.Fatalf("unexpected loaded option rationale: %q", loaded.Questions[0].Options[0].Rationale)
 	}
 
 	entries, err := os.ReadDir(store.dir)
