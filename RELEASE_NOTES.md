@@ -1,5 +1,18 @@
 # Release Notes
 
+## 1.2.0
+
+### Added
+
+- Option to show instant feedback after correct answers too.
+
+### Changed
+
+- User is now prompted for a detailed report when the exam ends.
+- Option-level rationales are no longer mandatory.
+- Improved terminal output layout.
+- Improved prompt in multi-answer questions.
+
 ## 1.1.0
 
 ### Added

@@ -9,7 +9,7 @@
 - Randomize option order per question.
 - Support questions with one or more correct answers.
 - Require the exact number of answers for multi-answer questions.
-- Show optional instant feedback with wrong-answer rationales.
+- Show optional instant feedback with rationales for incorrect answers or for every answer.
 - Run a random subset of a larger question bank.
 - Save interrupted sessions and resume them later.
 
@@ -44,11 +44,14 @@ examsim -help
 | `-e <path>` | Load an exam YAML file and start a new session. |
 | `-q <count>` | Use a random subset of questions from the exam. New sessions only. |
 | `-output-width <columns>` | Set output width in columns (minimum 8). Omit for automatic sizing, with an 80-column fallback. Works for new and resumed sessions. |
-| `-i`, `--instant-feedback` | Show correctness after each question and rationales for incorrect answers. New sessions only. |
+| `-i`, `--instant-feedback`, `--instant-feedback=incorrect` | Show correctness after each answer and rationales for incorrect answers. New sessions only. |
+| `-a`, `--instant-feedback=all` | Show correctness and available rationales after every answer. New sessions only. |
 | `-resume <session-id>` | Resume a saved session. |
 | `-h`, `-help`, `--help` | Show help and exit. |
 
 ## Examples
+
+Instant feedback is off unless you pass a feedback flag.
 
 Start an exam:
 
@@ -56,16 +59,16 @@ Start an exam:
 examsim -e examples/exam1.yaml
 ```
 
-Show feedback after each question:
+Show correctness after each answer and rationales for incorrect answers:
 
 ```sh
 examsim -e examples/exam1.yaml --instant-feedback
 ```
 
-The short flag works too:
+Show rationales after correct and incorrect answers:
 
 ```sh
-examsim -e examples/exam1.yaml -i
+examsim -e examples/exam1.yaml -a
 ```
 
 Use only a random subset of questions:
@@ -97,13 +100,13 @@ examsim -help
 
 Exams are YAML files with a top-level `name` and a `questions` list. Each question requires a `question` prompt and an `options` list, and can also include an optional `rationale` explaining the whole question. Unknown fields are rejected so mistakes in an answer key do not pass silently.
 
-The question rationale appears before the option rationales for incorrect answers, either immediately with instant feedback or in the final summary. It is preserved when saving and resuming a session. Omitted or blank question rationales are not displayed.
+Both question-level and option-level `rationale` fields are optional and may be omitted or left blank. When provided, the question rationale appears before the option rationales. In `all` mode, rationales appear immediately after each answer. In `incorrect` mode, they appear immediately after incorrect answers. The optional detailed report at the end shows rationales for incorrect answers in any mode.
 
-Each option requires:
+Each option has these fields:
 
 - `option`: the displayed answer text
 - `correct`: `true` or `false`
-- `rationale`: feedback shown for incorrect answers, either immediately with instant feedback or in the final summary
+- `rationale` (optional): an explanation of why the option is correct or incorrect
 
 Example:
 
@@ -144,7 +147,7 @@ When a question has more than one correct option, `examsim` displays the number 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Question 2 of 2                                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ What planet has rings? (Select 2 answers.)                                    │
+│ What planet has rings? (Select 2 answers.)                                   │
 │                                                                              │
 │ 1 - Uranus                                                                   │
 │                                                                              │
@@ -187,7 +190,7 @@ Session files are stored as JSON under:
 ~/.examsim/sessions/
 ```
 
-The saved session includes the shuffled question order, shuffled option order, answers so far, and current position. Resume IDs are UUIDs and can only address files inside the sessions directory. Options that configure a new exam, such as `-q` and `--instant-feedback`, cannot be combined with `-resume`.
+The saved session includes the shuffled question and option order, rationales, answers so far, current position, and instant feedback mode. Resume IDs are UUIDs and can only address files inside the sessions directory. Options that configure a new exam, such as `-q`, `-i`, `-a`, and `--instant-feedback`, cannot be combined with `-resume`.
 
 ## Development
 
