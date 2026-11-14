@@ -178,7 +178,7 @@ func TestPrintRationaleLayout(t *testing.T) {
 		{Option: "Unselected answer", Rationale: "Unselected explanation."},
 	}}
 	var output bytes.Buffer
-	printRationale(&output, question, []int{1, 2})
+	printRationale(&output, question, []int{1, 2}, false)
 	border := strings.Repeat("─", 78)
 	want := []string{
 		"┌" + border + "┐", "Incorrect.", "", "Only Earth is known to bear life.", "",

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,25 +22,16 @@ const appName = "examsim"
 
 var errInterrupted = errors.New("exam interrupted")
 
-type multiFlag struct {
-	value bool
-}
-
-func (f *multiFlag) String() string {
-	return strconv.FormatBool(f.value)
-}
-
-func (f *multiFlag) Set(value string) error {
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return err
+func (mode *feedbackMode) setInstantFeedback(value string) error {
+	switch value {
+	case "incorrect":
+		*mode = feedbackIncorrect
+	case "all":
+		*mode = feedbackAll
+	default:
+		return errors.New("expected incorrect or all")
 	}
-	f.value = parsed
 	return nil
-}
-
-func (f *multiFlag) IsBoolFlag() bool {
-	return true
 }
 
 type cliConfig struct {
@@ -47,7 +39,7 @@ type cliConfig struct {
 	resumeID        string
 	questionLimit   int
 	outputWidth     int
-	instantFeedback bool
+	instantFeedback feedbackMode
 }
 
 type result struct {
@@ -99,15 +91,17 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	}
 
 	var config cliConfig
-	instantFeedback := &multiFlag{}
 
 	flags.StringVar(&config.examPath, "e", "", "exam YAML file")
 	flags.StringVar(&config.resumeID, "resume", "", "resume a saved session ID")
 	flags.IntVar(&config.questionLimit, "q", 0, "number of random questions to include")
 	flags.IntVar(&config.outputWidth, "output-width", 0, "box width in columns (0 for automatic sizing)")
-	flags.Var(instantFeedback, "i", "show feedback after each question")
-	flags.Var(instantFeedback, "instant-feedback", "show feedback after each question")
+	flags.Func("instant-feedback", "show feedback for incorrect or all answers", config.instantFeedback.setInstantFeedback)
 
+	args, err := expandFeedbackFlags(flags, args)
+	if err != nil {
+		return cliConfig{}, false, err
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cliConfig{}, false, nil
@@ -118,7 +112,6 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 		return cliConfig{}, false, fmt.Errorf("unexpected argument(s): %s", strings.Join(flags.Args(), " "))
 	}
 
-	config.instantFeedback = instantFeedback.value
 	if config.examPath == "" && config.resumeID == "" {
 		return cliConfig{}, false, errors.New("provide -e exam.yaml to start, or -resume session-id to continue")
 	}
@@ -136,11 +129,47 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	flags.Visit(func(current *flag.Flag) {
 		setFlags[current.Name] = true
 	})
-	if config.resumeID != "" && (setFlags["q"] || setFlags["i"] || setFlags["instant-feedback"]) {
-		return cliConfig{}, false, errors.New("-q and --instant-feedback can only be used when starting a new exam")
+	if config.resumeID != "" && (setFlags["q"] || setFlags["instant-feedback"]) {
+		return cliConfig{}, false, errors.New("-q, -i, -a and --instant-feedback can only be used when starting a new exam")
 	}
 
 	return config, true, nil
+}
+
+func expandFeedbackFlags(flags *flag.FlagSet, args []string) ([]string, error) {
+	// Go's flag parser requires a value for flag.Func. Translate the bare
+	// feedback flags to named modes while skipping values of other flags.
+	expanded := slices.Clone(args)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		option, isFlag := strings.CutPrefix(arg, "-")
+		if !isFlag || option == "" || option == "-" {
+			break
+		}
+		name, _, hasValue := strings.Cut(strings.TrimPrefix(option, "-"), "=")
+		switch name {
+		case "i", "a":
+			if hasValue {
+				return nil, fmt.Errorf("-%s does not take a value", name)
+			}
+			expanded[i] = "--instant-feedback=incorrect"
+			if name == "a" {
+				expanded[i] = "--instant-feedback=all"
+			}
+		case "instant-feedback":
+			if !hasValue {
+				expanded[i] = "--instant-feedback=incorrect"
+			}
+		default:
+			if flags.Lookup(name) == nil {
+				return expanded, nil
+			}
+			if !hasValue {
+				i++
+			}
+		}
+	}
+	return expanded, nil
 }
 
 func execute(config cliConfig, input io.Reader, output io.Writer, store *sessionStore, interrupted <-chan os.Signal) error {
@@ -179,12 +208,13 @@ Usage:
   %s -help
 
 Options:
-  -e <path>                 Load an exam YAML file and start a new session.
-  -q <count>                Use a random subset when starting a new exam.
-  -output-width <columns>   Set box width; 0 uses automatic sizing (default).
-  -i, --instant-feedback    Show correctness and wrong-answer rationales immediately.
-  -resume <session-id>      Resume a saved session.
-  -h, -help, --help         Show this help message.
+  -e <path>                            Load an exam YAML file and start a new session.
+  -q <count>                           Use a random subset when starting a new exam.
+  -output-width <columns>              Set box width (0 for automatic sizing).
+  -i, --instant-feedback[=incorrect]   Give instant verdicts and explain incorrect answers.
+  -a, --instant-feedback=all           Give instant verdicts and explain every answer.
+  -resume <session-id>                 Resume a saved session.
+  -h, -help, --help                    Show this help message.
 `, appName, appName, appName, appName)
 }
 
@@ -245,11 +275,12 @@ func conductSession(session *Session, input io.Reader, output io.Writer, store *
 		}
 		session.Answers[session.Current] = selected
 
-		if session.InstantFeedback {
-			if answerCorrect(question, selected) {
+		if session.InstantFeedback != feedbackOff {
+			correct := answerCorrect(question, selected)
+			if correct && session.InstantFeedback == feedbackIncorrect {
 				printBox(output, "Correct!")
 			} else {
-				printRationale(output, question, selected)
+				printRationale(output, question, selected, correct)
 			}
 		}
 
@@ -387,12 +418,15 @@ func printDetailedReport(output io.Writer, session *Session) {
 	fmt.Fprintln(output, "\nRationale for incorrect answers:")
 	for _, item := range result.wrongItems {
 		printQuestion(output, fmt.Sprintf("Question %d of %d", item.number, total), item.question)
-		printRationale(output, item.question, item.selected)
+		printRationale(output, item.question, item.selected, false)
 	}
 }
 
-func printRationale(output io.Writer, question Question, selected []int) {
+func printRationale(output io.Writer, question Question, selected []int, correct bool) {
 	feedback := "Incorrect."
+	if correct {
+		feedback = "Correct!"
+	}
 	if strings.TrimSpace(question.Rationale) != "" {
 		feedback += "\n\n" + question.Rationale
 	}

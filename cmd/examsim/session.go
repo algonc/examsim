@@ -16,14 +16,54 @@ import (
 	"strings"
 )
 
+type feedbackMode int
+
+const (
+	feedbackOff feedbackMode = iota
+	feedbackIncorrect
+	feedbackAll
+)
+
+func (mode feedbackMode) MarshalJSON() ([]byte, error) {
+	// Keep the existing boolean format for off and incorrect-answer feedback.
+	switch mode {
+	case feedbackOff:
+		return []byte("false"), nil
+	case feedbackIncorrect:
+		return []byte("true"), nil
+	case feedbackAll:
+		return []byte(`"all"`), nil
+	default:
+		return nil, fmt.Errorf("invalid instant feedback mode %d", mode)
+	}
+}
+
+func (mode *feedbackMode) UnmarshalJSON(data []byte) error {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	switch value {
+	case false, nil:
+		*mode = feedbackOff
+	case true:
+		*mode = feedbackIncorrect
+	case "all":
+		*mode = feedbackAll
+	default:
+		return fmt.Errorf("invalid instant feedback setting %s", data)
+	}
+	return nil
+}
+
 type Session struct {
-	ID              string     `json:"id"`
-	ExamName        string     `json:"exam_name"`
-	ExamPath        string     `json:"exam_path"`
-	InstantFeedback bool       `json:"instant_feedback"`
-	Questions       []Question `json:"questions"`
-	Answers         [][]int    `json:"answers"`
-	Current         int        `json:"current"`
+	ID              string       `json:"id"`
+	ExamName        string       `json:"exam_name"`
+	ExamPath        string       `json:"exam_path"`
+	InstantFeedback feedbackMode `json:"instant_feedback"`
+	Questions       []Question   `json:"questions"`
+	Answers         [][]int      `json:"answers"`
+	Current         int          `json:"current"`
 }
 
 type sessionStore struct {

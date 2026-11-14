@@ -34,7 +34,8 @@ func TestRunHelp(t *testing.T) {
 		"Usage:",
 		"Options:",
 		"-e <path>",
-		"-i, --instant-feedback",
+		"-i, --instant-feedback[=incorrect]",
+		"-a, --instant-feedback=all",
 		"-resume <session-id>",
 		"-output-width <columns>",
 	} {
@@ -291,11 +292,64 @@ func TestParseCLIRejectsIgnoredArgumentsAndResumeOptions(t *testing.T) {
 			args: []string{"-resume", testSessionID, "--instant-feedback"},
 			want: "can only be used when starting",
 		},
+		{
+			name: "all feedback on resume",
+			args: []string{"-resume", testSessionID, "-a"},
+			want: "can only be used when starting",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, _, err := parseCLI(test.args, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want text %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestParseCLIInstantFeedback(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		want feedbackMode
+	}{
+		{name: "default", want: feedbackOff},
+		{name: "short incorrect", args: []string{"-i"}, want: feedbackIncorrect},
+		{name: "bare long", args: []string{"--instant-feedback"}, want: feedbackIncorrect},
+		{name: "explicit incorrect", args: []string{"--instant-feedback=incorrect"}, want: feedbackIncorrect},
+		{name: "short all", args: []string{"-a"}, want: feedbackAll},
+		{name: "explicit all", args: []string{"--instant-feedback=all"}, want: feedbackAll},
+		{name: "last flag wins", args: []string{"-a", "-i"}, want: feedbackIncorrect},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, proceed, err := parseCLI(append([]string{"-e", "exam.yaml"}, test.args...), io.Discard)
+			if err != nil || !proceed || config.instantFeedback != test.want {
+				t.Fatalf("feedback mode = %v, want %v, proceed = %v, error = %v", config.instantFeedback, test.want, proceed, err)
+			}
+		})
+	}
+	t.Run("feedback flag as exam path", func(t *testing.T) {
+		config, proceed, err := parseCLI([]string{"-e", "--instant-feedback", "-a"}, io.Discard)
+		if err != nil || !proceed || config.examPath != "--instant-feedback" || config.instantFeedback != feedbackAll {
+			t.Fatalf("exam path = %q, feedback mode = %v, proceed = %v, error = %v", config.examPath, config.instantFeedback, proceed, err)
+		}
+	})
+	for _, test := range []struct {
+		arg  string
+		want string
+	}{
+		{arg: "--instant-feedback=wrong", want: "expected incorrect or all"},
+		{arg: "--instant-feedback=true", want: "expected incorrect or all"},
+		{arg: "--instant-feedback=false", want: "expected incorrect or all"},
+		{arg: "-i=true", want: "-i does not take a value"},
+		{arg: "-i=false", want: "-i does not take a value"},
+		{arg: "-a=true", want: "-a does not take a value"},
+		{arg: "-a=false", want: "-a does not take a value"},
+	} {
+		t.Run(test.arg, func(t *testing.T) {
+			_, _, err := parseCLI([]string{"-e", "exam.yaml", test.arg}, io.Discard)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want text %q", err, test.want)
 			}
@@ -338,11 +392,18 @@ func TestParseCLIOutputWidth(t *testing.T) {
 func TestExecuteResumesWithOutputWidth(t *testing.T) {
 	store := &sessionStore{dir: t.TempDir()}
 	session := validTestSession()
-	session.InstantFeedback = true
+	session.InstantFeedback = feedbackIncorrect
 	session.Questions[0].Rationale = "Whole question explanation."
 	session.Questions[0].Options = append(session.Questions[0].Options, Option{Option: "Wrong", Rationale: "Wrong option explanation."})
 	if err := store.save(session); err != nil {
 		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(store.dir, session.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(content, []byte(`"instant_feedback": true`)) {
+		t.Fatal("incorrect mode must retain the legacy boolean format")
 	}
 	var output bytes.Buffer
 	if err := execute(cliConfig{resumeID: session.ID, outputWidth: 40}, strings.NewReader("2\n1\ny\n"), &output, store, nil); err != nil {
@@ -656,16 +717,18 @@ func TestConductSessionQuestionRationale(t *testing.T) {
 	const rationale = "Only Earth is known to bear life.\nNo confirmed life on Mars."
 	for _, test := range []struct {
 		name            string
-		instantFeedback bool
+		instantFeedback feedbackMode
 		answer          string
 		rationale       string
 		wantCount       int
 	}{
 		{name: "summary", answer: "2\n", rationale: rationale, wantCount: 1},
-		{name: "instant and summary", instantFeedback: true, answer: "2\n", rationale: rationale, wantCount: 2},
-		{name: "correct answer", instantFeedback: true, answer: "1\n", rationale: rationale},
-		{name: "omitted", instantFeedback: true, answer: "2\n"},
-		{name: "blank", instantFeedback: true, answer: "2\n", rationale: " \n\t"},
+		{name: "instant and summary", instantFeedback: feedbackIncorrect, answer: "2\n", rationale: rationale, wantCount: 2},
+		{name: "correct answer in incorrect mode", instantFeedback: feedbackIncorrect, answer: "1\n", rationale: rationale},
+		{name: "incorrect answer in all mode", instantFeedback: feedbackAll, answer: "2\n", rationale: rationale, wantCount: 2},
+		{name: "correct answer in all mode", instantFeedback: feedbackAll, answer: "1\n", rationale: rationale, wantCount: 1},
+		{name: "omitted", instantFeedback: feedbackIncorrect, answer: "2\n"},
+		{name: "blank", instantFeedback: feedbackIncorrect, answer: "2\n", rationale: " \n\t"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			session := validTestSession()
@@ -688,8 +751,15 @@ func TestConductSessionQuestionRationale(t *testing.T) {
 			if got := strings.Count(text, "Only Earth is known to bear life."); got != test.wantCount {
 				t.Fatalf("question rationale count = %d, want %d:\n%s", got, test.wantCount, text)
 			}
+			wantCorrectOption, wantDistractor := "Option 1 (correct)", "Option 2 (selected)"
+			if test.answer == "1\n" {
+				wantCorrectOption, wantDistractor = "Option 1 (correct, selected)", "Option 2"
+				if !strings.Contains(text, "│ Correct!") {
+					t.Fatalf("unexpected correct-answer verdict:\n%s", text)
+				}
+			}
 			if test.wantCount > 0 {
-				for _, want := range []string{"Only Earth is known to bear life.", "No confirmed life on Mars.", "Option 1 (correct)", "Option 2 (selected)", "Earth bears life.", "No confirmed life found."} {
+				for _, want := range []string{"No confirmed life on Mars.", wantCorrectOption, wantDistractor, "Earth bears life.", "No confirmed life found."} {
 					if got := strings.Count(text, want); got != test.wantCount {
 						t.Fatalf("feedback %q count = %d, want %d:\n%s", want, got, test.wantCount, text)
 					}
@@ -699,6 +769,8 @@ func TestConductSessionQuestionRationale(t *testing.T) {
 				}
 			} else if test.answer == "2\n" && (!strings.Contains(text, "Option 2 (selected)") || !strings.Contains(text, "No confirmed life found.")) {
 				t.Fatalf("missing option feedback:\n%s", text)
+			} else if test.answer == "1\n" && strings.Contains(text, "Option 1 (correct, selected)") {
+				t.Fatalf("unexpected option rationale:\n%s", text)
 			}
 		})
 	}
@@ -750,12 +822,12 @@ questions:
     options:
       - option: Answer
         correct: true
-        rationale: Correct.
+        rationale: Explanation for the correct answer.
   - question: Second
     options:
       - option: Answer
         correct: true
-        rationale: Correct.
+        rationale: Explanation for the correct answer.
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -769,13 +841,25 @@ questions:
 		release: release,
 	}
 	var interruptedOutput bytes.Buffer
-	if err := execute(cliConfig{examPath: examPath}, input, &interruptedOutput, store, interrupts); err != nil {
+	config, proceed, err := parseCLI([]string{"-e", examPath, "-a"}, io.Discard)
+	if err != nil || !proceed {
+		close(release)
+		t.Fatalf("parseCLI: proceed = %v, error = %v", proceed, err)
+	}
+	if err := execute(config, input, &interruptedOutput, store, interrupts); err != nil {
 		close(release)
 		t.Fatalf("interrupted execution: %v", err)
 	}
 	close(release)
 	if !strings.Contains(interruptedOutput.String(), "Resume this session with") {
 		t.Fatalf("missing resume instructions:\n%s", interruptedOutput.String())
+	}
+	text := interruptedOutput.String()
+	verdictAt := strings.Index(text, "│ Correct!")
+	rationaleAt := strings.Index(text, "Explanation for the correct answer.")
+	nextQuestionAt := strings.Index(text, "Question 2 of 2")
+	if verdictAt < 0 || rationaleAt <= verdictAt || nextQuestionAt <= rationaleAt {
+		t.Fatalf("expected verdict and rationale before the next question:\n%s", text)
 	}
 
 	entries, err := os.ReadDir(store.dir)
@@ -793,6 +877,9 @@ questions:
 	if saved.Current != 1 {
 		t.Fatalf("saved progress = %d, want 1", saved.Current)
 	}
+	if saved.InstantFeedback != feedbackAll {
+		t.Fatalf("saved feedback mode = %v, want all", saved.InstantFeedback)
+	}
 
 	var resumedOutput bytes.Buffer
 	if err := execute(cliConfig{resumeID: resumeID}, strings.NewReader("1\n"), &resumedOutput, store, nil); err != nil {
@@ -800,6 +887,9 @@ questions:
 	}
 	if !strings.Contains(resumedOutput.String(), "100% (2 correct of 2 questions).") {
 		t.Fatalf("unexpected resumed output:\n%s", resumedOutput.String())
+	}
+	if got := strings.Count(resumedOutput.String(), "Explanation for the correct answer."); got != 1 {
+		t.Fatalf("resumed rationale count = %d, want 1:\n%s", got, resumedOutput.String())
 	}
 	if _, err := os.Stat(filepath.Join(store.dir, resumeID+".json")); !os.IsNotExist(err) {
 		t.Fatalf("completed session was not removed: %v", err)
