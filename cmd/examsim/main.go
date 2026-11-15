@@ -39,6 +39,7 @@ type cliConfig struct {
 	resumeID        string
 	questionLimit   int
 	outputWidth     int
+	outputWidthSet  bool
 	instantFeedback feedbackMode
 }
 
@@ -96,6 +97,7 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	flags.StringVar(&config.resumeID, "resume", "", "resume a saved session ID")
 	flags.IntVar(&config.questionLimit, "q", 0, "number of random questions to include")
 	flags.IntVar(&config.outputWidth, "output-width", 0, "box width in columns (0 for automatic sizing)")
+	flags.IntVar(&config.outputWidth, "w", 0, "shorthand for --output-width")
 	flags.Func("instant-feedback", "show feedback for incorrect or all answers", config.instantFeedback.setInstantFeedback)
 
 	args, err := expandFeedbackFlags(flags, args)
@@ -121,14 +123,15 @@ func parseCLI(args []string, output io.Writer) (cliConfig, bool, error) {
 	if config.questionLimit < 0 {
 		return cliConfig{}, false, errors.New("-q must be zero or greater")
 	}
-	if config.outputWidth != 0 && config.outputWidth < 8 {
-		return cliConfig{}, false, errors.New("-output-width must be zero (automatic) or at least 8 columns")
+	if !validOutputWidth(config.outputWidth) {
+		return cliConfig{}, false, fmt.Errorf("-output-width must be zero (automatic) or at least %d columns", minBoxWidth)
 	}
 
 	setFlags := map[string]bool{}
 	flags.Visit(func(current *flag.Flag) {
 		setFlags[current.Name] = true
 	})
+	config.outputWidthSet = setFlags["output-width"] || setFlags["w"]
 	if config.resumeID != "" && (setFlags["q"] || setFlags["instant-feedback"]) {
 		return cliConfig{}, false, errors.New("-q, -i, -a and --instant-feedback can only be used when starting a new exam")
 	}
@@ -173,10 +176,12 @@ func expandFeedbackFlags(flags *flag.FlagSet, args []string) ([]string, error) {
 }
 
 func execute(config cliConfig, input io.Reader, output io.Writer, store *sessionStore, interrupted <-chan os.Signal) error {
-	output = &widthOutput{Writer: output, width: config.outputWidth}
 	session, err := loadOrCreateSession(store, config)
 	if err != nil {
 		return err
+	}
+	if config.outputWidthSet {
+		session.OutputWidth = config.outputWidth
 	}
 
 	// Persist the randomized exam before prompting so even an immediate
@@ -185,6 +190,7 @@ func execute(config cliConfig, input io.Reader, output io.Writer, store *session
 		return err
 	}
 
+	output = &widthOutput{Writer: output, width: session.OutputWidth}
 	err = conductSession(session, input, output, store, interrupted)
 	if errors.Is(err, errInterrupted) || (errors.Is(err, io.EOF) && session.Current < len(session.Questions)) {
 		if saveErr := store.save(session); saveErr != nil {
@@ -204,13 +210,13 @@ func printHelp(output io.Writer) {
 
 Usage:
   %s -e <exam.yaml> [options]
-  %s -resume <session-id> [-output-width <columns>]
+  %s -resume <session-id> [-w <columns>]
   %s -help
 
 Options:
   -e <path>                            Load an exam YAML file and start a new session.
   -q <count>                           Use a random subset when starting a new exam.
-  -output-width <columns>              Set box width (0 for automatic sizing).
+  -w, --output-width <columns>         Set and save box width (0 for automatic sizing).
   -i, --instant-feedback[=incorrect]   Give instant verdicts and explain incorrect answers.
   -a, --instant-feedback=all           Give instant verdicts and explain every answer.
   -resume <session-id>                 Resume a saved session.

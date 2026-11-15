@@ -37,7 +37,7 @@ func TestRunHelp(t *testing.T) {
 		"-i, --instant-feedback[=incorrect]",
 		"-a, --instant-feedback=all",
 		"-resume <session-id>",
-		"-output-width <columns>",
+		"-w, --output-width <columns>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help output missing %q:\n%s", want, text)
@@ -362,27 +362,29 @@ func TestParseCLIOutputWidth(t *testing.T) {
 		name    string
 		args    []string
 		width   int
-		wantErr bool
+		wantSet bool
+		wantErr string
 	}{
 		{name: "default", args: []string{"-e", "exam.yaml"}},
-		{name: "automatic", args: []string{"-e", "exam.yaml", "-output-width", "0"}},
-		{name: "narrow", args: []string{"-e", "exam.yaml", "-output-width", "40"}, width: 40},
-		{name: "wide", args: []string{"-e", "exam.yaml", "-output-width", "120"}, width: 120},
-		{name: "minimum", args: []string{"-e", "exam.yaml", "-output-width", "8"}, width: 8},
-		{name: "resume", args: []string{"-resume", testSessionID, "-output-width", "60"}, width: 60},
-		{name: "negative", args: []string{"-e", "exam.yaml", "-output-width", "-1"}, wantErr: true},
-		{name: "too small", args: []string{"-e", "exam.yaml", "-output-width", "7"}, wantErr: true},
-		{name: "not a number", args: []string{"-e", "exam.yaml", "-output-width", "wide"}, wantErr: true},
+		{name: "automatic", args: []string{"-e", "exam.yaml", "-output-width", "0"}, wantSet: true},
+		{name: "short", args: []string{"-e", "exam.yaml", "-w", "40"}, width: 40, wantSet: true},
+		{name: "long", args: []string{"-e", "exam.yaml", "--output-width", "120"}, width: 120, wantSet: true},
+		{name: "minimum", args: []string{"-e", "exam.yaml", "-output-width", "8"}, width: 8, wantSet: true},
+		{name: "resume", args: []string{"--resume", testSessionID, "-w=60"}, width: 60, wantSet: true},
+		{name: "last flag wins", args: []string{"-resume", testSessionID, "-w", "60", "--output-width=0"}, wantSet: true},
+		{name: "negative", args: []string{"-e", "exam.yaml", "-w", "-1"}, wantErr: "at least 8 columns"},
+		{name: "too small", args: []string{"-e", "exam.yaml", "--output-width", "7"}, wantErr: "at least 8 columns"},
+		{name: "not a number", args: []string{"-e", "exam.yaml", "-w", "wide"}, wantErr: "invalid value"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config, proceed, err := parseCLI(test.args, io.Discard)
-			if test.wantErr {
-				if err == nil || !strings.Contains(err.Error(), "output-width") {
-					t.Fatalf("error = %v, want invalid output width", err)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("error = %v, want %q", err, test.wantErr)
 				}
 				return
 			}
-			if err != nil || !proceed || config.outputWidth != test.width {
+			if err != nil || !proceed || config.outputWidth != test.width || config.outputWidthSet != test.wantSet {
 				t.Fatalf("config = %#v, proceed = %v, error = %v", config, proceed, err)
 			}
 		})
@@ -392,6 +394,7 @@ func TestParseCLIOutputWidth(t *testing.T) {
 func TestExecuteResumesWithOutputWidth(t *testing.T) {
 	store := &sessionStore{dir: t.TempDir()}
 	session := validTestSession()
+	session.OutputWidth = 60
 	session.InstantFeedback = feedbackIncorrect
 	session.Questions[0].Rationale = "Whole question explanation."
 	session.Questions[0].Options = append(session.Questions[0].Options, Option{Option: "Wrong", Rationale: "Wrong option explanation."})
@@ -405,13 +408,58 @@ func TestExecuteResumesWithOutputWidth(t *testing.T) {
 	if !bytes.Contains(content, []byte(`"instant_feedback": true`)) {
 		t.Fatal("incorrect mode must retain the legacy boolean format")
 	}
+	config, proceed, err := parseCLI([]string{"-resume", session.ID, "-w", "40"}, io.Discard)
+	if err != nil || !proceed {
+		t.Fatalf("parseCLI: proceed = %v, error = %v", proceed, err)
+	}
 	var output bytes.Buffer
-	if err := execute(cliConfig{resumeID: session.ID, outputWidth: 40}, strings.NewReader("2\n1\ny\n"), &output, store, nil); err != nil {
+	if err := execute(config, strings.NewReader("2\n1\ny\n"), &output, store, nil); err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 	assertOutputBoxWidth(t, output.String(), 40)
 	if got := strings.Count(output.String(), "Whole question explanation."); got != 2 {
 		t.Fatalf("question rationale count = %d, want instant and summary feedback", got)
+	}
+}
+
+func TestExecutePersistsResumedOutputWidth(t *testing.T) {
+	store := &sessionStore{dir: t.TempDir()}
+	session := validTestSession()
+	if err := store.save(session); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(store.dir, session.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(content, []byte(`"output_width"`)) {
+		t.Fatal("legacy session fixture must omit output_width")
+	}
+
+	for _, step := range []struct {
+		name  string
+		flags []string
+		width int
+	}{
+		{name: "legacy session", width: defaultBoxWidth},
+		{name: "override", flags: []string{"--output-width", "60"}, width: 60},
+		{name: "reuse override", width: 60},
+		{name: "reset to automatic", flags: []string{"-w", "0"}, width: defaultBoxWidth},
+		{name: "reuse automatic setting", width: defaultBoxWidth},
+	} {
+		if !t.Run(step.name, func(t *testing.T) {
+			config, proceed, err := parseCLI(append([]string{"--resume", session.ID}, step.flags...), io.Discard)
+			if err != nil || !proceed {
+				t.Fatalf("parseCLI: proceed = %v, error = %v", proceed, err)
+			}
+			var output bytes.Buffer
+			if err := execute(config, strings.NewReader(""), &output, store, nil); err != nil {
+				t.Fatalf("resume: %v", err)
+			}
+			assertOutputBoxWidth(t, output.String(), step.width)
+		}) {
+			break
+		}
 	}
 }
 
@@ -841,7 +889,7 @@ questions:
 		release: release,
 	}
 	var interruptedOutput bytes.Buffer
-	config, proceed, err := parseCLI([]string{"-e", examPath, "-a"}, io.Discard)
+	config, proceed, err := parseCLI([]string{"-e", examPath, "-w", "64", "-a"}, io.Discard)
 	if err != nil || !proceed {
 		close(release)
 		t.Fatalf("parseCLI: proceed = %v, error = %v", proceed, err)
@@ -851,6 +899,7 @@ questions:
 		t.Fatalf("interrupted execution: %v", err)
 	}
 	close(release)
+	assertOutputBoxWidth(t, interruptedOutput.String(), 64)
 	if !strings.Contains(interruptedOutput.String(), "Resume this session with") {
 		t.Fatalf("missing resume instructions:\n%s", interruptedOutput.String())
 	}
@@ -880,11 +929,15 @@ questions:
 	if saved.InstantFeedback != feedbackAll {
 		t.Fatalf("saved feedback mode = %v, want all", saved.InstantFeedback)
 	}
+	if saved.OutputWidth != 64 {
+		t.Fatalf("saved output width = %d, want 64", saved.OutputWidth)
+	}
 
 	var resumedOutput bytes.Buffer
 	if err := execute(cliConfig{resumeID: resumeID}, strings.NewReader("1\n"), &resumedOutput, store, nil); err != nil {
 		t.Fatalf("resumed execution: %v", err)
 	}
+	assertOutputBoxWidth(t, resumedOutput.String(), 64)
 	if !strings.Contains(resumedOutput.String(), "100% (2 correct of 2 questions).") {
 		t.Fatalf("unexpected resumed output:\n%s", resumedOutput.String())
 	}

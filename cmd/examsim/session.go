@@ -61,6 +61,7 @@ type Session struct {
 	ExamName        string       `json:"exam_name"`
 	ExamPath        string       `json:"exam_path"`
 	InstantFeedback feedbackMode `json:"instant_feedback"`
+	OutputWidth     int          `json:"output_width,omitempty"`
 	Questions       []Question   `json:"questions"`
 	Answers         [][]int      `json:"answers"`
 	Current         int          `json:"current"`
@@ -186,6 +187,9 @@ func validateSession(session *Session) error {
 	}
 	if strings.TrimSpace(session.ExamPath) == "" {
 		return errors.New("session exam path is empty")
+	}
+	if !validOutputWidth(session.OutputWidth) {
+		return fmt.Errorf("session output width must be zero (automatic) or at least %d columns", minBoxWidth)
 	}
 	if err := validateExam(session.ExamName, session.Questions); err != nil {
 		return err
