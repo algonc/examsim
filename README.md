@@ -33,7 +33,7 @@ go install github.com/algonc/examsim/cmd/examsim@latest
 
 ```sh
 examsim -e <exam.yaml> [options]
-examsim -resume <session-id> [-output-width <columns>]
+examsim -resume <session-id> [-w <columns>]
 examsim -help
 ```
 
@@ -43,7 +43,7 @@ examsim -help
 | --- | --- |
 | `-e <path>` | Load an exam YAML file and start a new session. |
 | `-q <count>` | Use a random subset of questions from the exam. New sessions only. |
-| `-output-width <columns>` | Set output width in columns (minimum 8). Omit for automatic sizing, with an 80-column fallback. Works for new and resumed sessions. |
+| `-w <columns>`, `--output-width <columns>` | Set and save output width (minimum 8 columns). Use `0` for automatic sizing, with an 80-column fallback. With the flag omitted, new sessions use automatic sizing and resumed sessions reuse their saved setting. |
 | `-i`, `--instant-feedback`, `--instant-feedback=incorrect` | Show correctness after each answer and rationales for incorrect answers. New sessions only. |
 | `-a`, `--instant-feedback=all` | Show correctness and available rationales after every answer. New sessions only. |
 | `-resume <session-id>` | Resume a saved session. |
@@ -83,11 +83,12 @@ Resume an interrupted session:
 examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b
 ```
 
-Set an output width:
+Start with a fixed width, change it when resuming, or reset it to automatic sizing:
 
 ```sh
-examsim -e examples/exam1.yaml -output-width 100
-examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b -output-width 60
+examsim -e examples/exam1.yaml -w 100
+examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b --output-width 60
+examsim -resume 0bd73aa1-af51-45cd-af81-544d65239a4b -w 0
 ```
 
 Print help:
@@ -190,7 +191,7 @@ Session files are stored as JSON under:
 ~/.examsim/sessions/
 ```
 
-The saved session includes the shuffled question and option order, rationales, answers so far, current position, and instant feedback mode. Resume IDs are UUIDs and can only address files inside the sessions directory. Options that configure a new exam, such as `-q`, `-i`, `-a`, and `--instant-feedback`, cannot be combined with `-resume`.
+The saved session includes the shuffled question and option order, rationales, answers so far, current position, instant feedback mode, and any fixed output width. Older sessions without a saved width use automatic sizing. Resume IDs are UUIDs and can only address files inside the sessions directory. Options that configure a new exam, such as `-q`, `-i`, `-a`, and `--instant-feedback`, cannot be combined with `-resume`.
 
 ## Development
 

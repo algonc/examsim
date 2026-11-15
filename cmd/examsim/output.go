@@ -14,7 +14,14 @@ import (
 	"golang.org/x/term"
 )
 
-const defaultBoxWidth = 80
+const (
+	minBoxWidth     = 8
+	defaultBoxWidth = 80
+)
+
+func validOutputWidth(width int) bool {
+	return width == 0 || width >= minBoxWidth
+}
 
 func selectionCountWords(count int) string {
 	words := [...]string{"one", "two", "three", "four", "five"}
@@ -38,7 +45,7 @@ func boxWidth(output io.Writer) int {
 	}
 	width := defaultBoxWidth
 	if file, ok := output.(*os.File); ok {
-		if columns, _, err := term.GetSize(int(file.Fd())); err == nil && columns >= 8 {
+		if columns, _, err := term.GetSize(int(file.Fd())); err == nil && columns >= minBoxWidth {
 			return min(width, columns)
 		}
 	}
