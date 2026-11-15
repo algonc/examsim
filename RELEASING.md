@@ -10,28 +10,28 @@ Never move or reuse a version tag after pushing it. If released code needs a cor
 
 ## Prepare the Release
 
+You’ll need Go, Git, and GNU Make to run these steps.
+
 1. Confirm the intended changes are committed on the default branch.
 2. Update user documentation when behavior has changed.
-3. Tidy and verify the module:
+3. Tidy the module and check for changes to the dependency files.
 
-```sh
-go mod tidy
-git diff --exit-code -- go.mod go.sum
-go mod verify
-```
+   ```sh
+   make tidy
+   git diff --exit-code -- go.mod go.sum
+   ```
 
-4. Run the local quality checks:
+4. Verify dependencies, run vet, and run tests.
 
-```sh
-go test -count=1 ./...
-go vet ./...
-```
+   ```sh
+   make verify vet test
+   ```
 
-5. Ensure the working tree is clean:
+5. Ensure the working tree is clean.
 
-```sh
-git status --short
-```
+   ```sh
+   git status --short
+   ```
 
 ## Publish the Release
 
