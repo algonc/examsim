@@ -23,7 +23,7 @@ Release assets are available for Linux, macOS, and Windows on AMD64 and ARM64. C
 
 ### Go
 
-With Go 1.25 or newer installed:
+Use Go 1.26.0 or newer to install from source.
 
 ```sh
 go install github.com/algonc/examsim/cmd/examsim@latest

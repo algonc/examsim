@@ -4,7 +4,7 @@ Contributions are welcome. Keep changes focused, preserve existing command behav
 
 ## Requirements
 
-- Go 1.25 or newer
+- Go 1.26.0 or newer
 - Git
 - GNU Make and `golangci-lint` for the Makefile checks (optional when running Go commands directly)
 
