@@ -21,15 +21,7 @@
 curl -fsSL https://raw.githubusercontent.com/algonc/examsim/main/install.sh | sh
 ```
 
-The installer verifies the latest stable release archive's SHA-256 checksum and installs `examsim` in `~/.local/bin`. Follow the printed hint if that directory needs to be added to your `PATH`. Rerun the command to upgrade, then run `examsim -help` to verify the installation.
-
-Pass `--version` to select a release and `--bin-dir` to set the destination. Both options are optional.
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/algonc/examsim/main/install.sh | sh -s -- --version v1.2.0 --bin-dir "$HOME/.local/bin"
-```
-
-The installer copies only the executable. For the sample exam used below, download a release package or save [examples/exam1.yaml](examples/exam1.yaml) separately.
+Installs the latest stable release to `~/.local/bin`. Rerun to upgrade or append `-s -- --help` to see installer options.
 
 ### Release binaries
 
